@@ -6,7 +6,7 @@
 PROJECT = Project_template
 
 #Define path to the e-puck2_main-processor folder
-GLOBAL_PATH = C:\Users\YuriBlyat\Desktop\Eclipse_e-puck2\projekt\lib\e-puck2_main-processor
+GLOBAL_PATH = C:\Users\elsap\Desktop\SystEmbarques\projet\projet_SysEmb\e-puck2_main-processor
 
 #Source files to include
 CSRC += ./main.c \
