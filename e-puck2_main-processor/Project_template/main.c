@@ -9,7 +9,19 @@
 #include <chprintf.h>
 #include <i2c_bus.h>
 #include <imu.h>
+#include <usbcfg.h>
+#include <motors.h>
 
+//deux états possibles
+#define PANIK 1
+#define KALM 0
+//vitesse constante
+#define speed 600
+
+#define PI                  3.1415926536f
+//TO ADJUST IF NECESSARY. NOT ALL THE E-PUCK2 HAVE EXACTLY THE SAME WHEEL DISTANCE
+#define WHEEL_DISTANCE      5.4f    //cm
+#define PERIMETER_EPUCK     (PI * WHEEL_DISTANCE)
 #define NB_SAMPLES_OFFSET     200
 
 messagebus_t bus;
@@ -43,34 +55,6 @@ static void timer11_start(void){
     //let the timer count to max value
     gptStartContinuous(&GPTD11, 0xFFFF);
 }
-/*
-static THD_WORKING_AREA(waThdLed, 128);
-static THD_FUNCTION(ThdLed, arg) {
-
-    chRegSetThreadName(__FUNCTION__);
-    (void)arg;
-
-    systime_t time;
-
-    while(1){
-        time = chVTGetSystemTime();
-        //palTogglePad(GPIOD, GPIOD_LED_FRONT);
-        palTogglePad(GPIOB, GPIOB_LED_BODY);
-        chThdSleepUntilWindowed(time, time + MS2ST(100));
-    }
-}
-*/
-static THD_WORKING_AREA(waThdBodyLed, 128);
-static THD_FUNCTION(ThdBodyLed, arg) {
-
-    chRegSetThreadName(__FUNCTION__);
-    (void)arg;
-
-    while(1){
-        palTogglePad(GPIOB, GPIOB_LED_BODY);
-        chThdSleepMilliseconds(500);
-    }
-}
 
 void show_gravity(imu_msg_t *imu_values){
 
@@ -78,7 +62,7 @@ void show_gravity(imu_msg_t *imu_values){
     //select which one to turn on
     uint8_t led1 = 0, led3 = 0, led5 = 0, led7 = 0;
     //threshold value to not use the leds when the robot is too horizontal
-    float threshold = 0.3;
+    float threshold = 0.6;
     //create a pointer to the array for shorter name
     float *accel = imu_values->acceleration;
     //variable to measure the time some functions take
@@ -136,33 +120,43 @@ void show_gravity(imu_msg_t *imu_values){
 
 }
 
-void panik_check(imu_msg_t *imu_values){
-	float threshold = 0.8;
-	float *gyro = imu_values->gyro_rate;
-	//thread_t *Led = chThdCreateI(waThdLed, sizeof(waThdLed), LOWPRIO, ThdLed, NULL);
-	//thread_t *BodyLed = chThdCreateI(waThdBodyLed, sizeof(waThdBodyLed), NORMALPRIO, ThdBodyLed, NULL);
-    //chThdCreateSuspended (waThdFrontLed);
-    //chThdCreateSuspended (waThdBodyLed);
-	//volatile uint16_t time = 0;
-	//chSysLock();
-    //GPTD11.tim->CNT = 0;
-    if(fabs(gyro[X_AXIS]) > threshold || fabs(gyro[Y_AXIS]) > threshold){
-    	//chThdStart (Led);
+void panik_check(float gx, float gy){
+	float threshold = 1;
+	static int etat = KALM;
+	static int old_etat = KALM;
+
+    if(fabs(gx) > threshold || fabs(gy) > threshold){
+    	etat = PANIK;
     	chprintf((BaseSequentialStream *)&SD3, "*paniiik*	\n");
+    	right_motor_set_speed(0);
+    	left_motor_set_speed(0);
     }
     else{
-        //chThdExit(*waThdFrontLed);
-        //chThdExit(*waThdBodyLed);
-        //chThdSleep(1);
-        //chThdSleepMilliseconds(500);
-    	//chThdWait(FrontLed);
-    	//chThdTerminate(Led);
+    	etat = KALM;
     	chprintf((BaseSequentialStream *)&SD3, "*kalm*	\n");
     }
-    //time = GPTD11.tim->CNT;
-    //chSysUnlock();
+
+    if (etat!=old_etat){
+  		palTogglePad(GPIOD, GPIOD_LED_FRONT);
+  		palTogglePad(GPIOB, GPIOB_LED_BODY);
+  		old_etat=etat;
+    }
 }
 
+void speed_switch(float gz){
+		if(gz>0.4){
+              	right_motor_set_speed(speed);
+              	left_motor_set_speed(speed);
+	    }
+		else if(gz<-0.4){
+			right_motor_set_speed(-speed);
+			left_motor_set_speed(-speed);
+	    }
+		else{
+			right_motor_set_speed(0);
+			left_motor_set_speed(0);
+	    }
+}
 
 int main(void)
 {
@@ -174,16 +168,11 @@ int main(void)
     timer11_start();
     i2c_start();
     imu_start();
+    motors_init();
+
 
         /** Inits the Inter Process Communication bus. */
         messagebus_init(&bus, &bus_lock, &bus_condvar);
-
-
-        //chThdCreateStatic(waThdFrontLed, sizeof(waThdFrontLed), NORMALPRIO, ThdFrontLed, NULL);
-        //chThdCreateStatic(waThdBodyLed, sizeof(waThdBodyLed), NORMALPRIO, ThdBodyLed, NULL);
-
-        //to change the priority of the thread invoking the function. The main function in this case
-        //chThdSetPriority(NORMALPRIO+2);
 
         messagebus_topic_t *imu_topic = messagebus_find_topic_blocking(&bus, "/imu");
         imu_msg_t imu_values;
@@ -195,19 +184,6 @@ int main(void)
         while(1){
             //wait for new measures to be published
             messagebus_topic_wait(imu_topic, &imu_values, sizeof(imu_values));
-            //prints raw values
-            chprintf((BaseSequentialStream *)&SD3, "%Ax=%-7d Ay=%-7d Az=%-7d Gx=%-7d Gy=%-7d Gz=%-7d\r\n",
-                    imu_values.acc_raw[X_AXIS], imu_values.acc_raw[Y_AXIS], imu_values.acc_raw[Z_AXIS],
-                    imu_values.gyro_raw[X_AXIS], imu_values.gyro_raw[Y_AXIS], imu_values.gyro_raw[Z_AXIS]);
-
-            //prints raw values with offset correction
-            chprintf((BaseSequentialStream *)&SD3, "%Ax=%-7d Ay=%-7d Az=%-7d Gx=%-7d Gy=%-7d Gz=%-7d\r\n",
-                    imu_values.acc_raw[X_AXIS]-imu_values.acc_offset[X_AXIS],
-                    imu_values.acc_raw[Y_AXIS]-imu_values.acc_offset[Y_AXIS],
-                    imu_values.acc_raw[Z_AXIS]-imu_values.acc_offset[Z_AXIS],
-                    imu_values.gyro_raw[X_AXIS]-imu_values.gyro_offset[X_AXIS],
-                    imu_values.gyro_raw[Y_AXIS]-imu_values.gyro_offset[Y_AXIS],
-                    imu_values.gyro_raw[Z_AXIS]-imu_values.gyro_offset[Z_AXIS]);
 
             //prints values in readable units
             chprintf((BaseSequentialStream *)&SD3, "%Ax=%.2f Ay=%.2f Az=%.2f Gx=%.2f Gy=%.2f Gz=%.2f (%x)\r\n\n",
@@ -217,24 +193,9 @@ int main(void)
 
             show_gravity(&imu_values);
             chThdSleepMilliseconds(100);
-            panik_check(&imu_values);
-            //panik check
-            //thread_t *Led = chThdCreateI(waThdBodyLed, sizeof(waThdBodyLed), NORMALPRIO, ThdBodyLed, NULL);
-           /* thread_t *Led = chThdCreateStatic(waThdBodyLed, sizeof(waThdBodyLed), NORMALPRIO, ThdBodyLed, NULL);
-            float threshold = 0.7;
-            if(fabs(imu_values.gyro_rate[X_AXIS]) > threshold || fabs(imu_values.gyro_rate[Y_AXIS]) > threshold){
-            	chprintf((BaseSequentialStream *)&SD3, "*paniiik*	\n");
-            	chThdStart (Led);
-                }
-                else{
-                    //chThdExit(*waThdFrontLed);
-                    //chThdExit(*waThdBodyLed);
-                    //chThdSleep(1);
-                    //chThdSleepMilliseconds(500);
-                	//chThdWait(FrontLed);
-                	chThdTerminate(Led);
-                }
-            //chThdSleepMilliseconds(100);*/
+            speed_switch(imu_values.gyro_rate[Z_AXIS]);
+            panik_check(imu_values.gyro_rate[X_AXIS], imu_values.gyro_rate[Y_AXIS]);
+
         }
 
     }
