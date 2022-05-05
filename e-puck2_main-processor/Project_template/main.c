@@ -11,6 +11,7 @@
 #include <imu.h>
 #include <usbcfg.h>
 #include <motors.h>
+#include "sensors/proximity.h"
 
 //deux états possibles
 #define PANIK 1
@@ -169,7 +170,7 @@ int main(void)
     i2c_start();
     imu_start();
     motors_init();
-
+    proximity_start();
 
         /** Inits the Inter Process Communication bus. */
         messagebus_init(&bus, &bus_lock, &bus_condvar);
@@ -180,6 +181,8 @@ int main(void)
         //wait 2 sec to be sure the e-puck is in a stable position
         chThdSleepMilliseconds(2000);
         imu_compute_offset(imu_topic, NB_SAMPLES_OFFSET);
+
+        calibrate_ir();
 
         while(1){
             //wait for new measures to be published
@@ -195,7 +198,9 @@ int main(void)
             chThdSleepMilliseconds(100);
             speed_switch(imu_values.gyro_rate[Z_AXIS]);
             panik_check(imu_values.gyro_rate[X_AXIS], imu_values.gyro_rate[Y_AXIS]);
-
+            chprintf((BaseSequentialStream *)&SD3, "A=%d B=%d C=%d D=%d E=%d F=%d G=%d H=%d\r\n\n",
+                      get_calibrated_prox(0),get_calibrated_prox(1),get_calibrated_prox(2),get_calibrated_prox(3),
+                      get_calibrated_prox(4),get_calibrated_prox(5),get_calibrated_prox(6),get_calibrated_prox(7));
         }
 
     }
