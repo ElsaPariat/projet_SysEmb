@@ -11,6 +11,7 @@
 #include <imu.h>
 #include <usbcfg.h>
 #include <motors.h>
+#include "ir_sensors.h"
 #include "sensors/proximity.h"
 
 //deux états possibles
@@ -170,40 +171,48 @@ int main(void)
     i2c_start();
     imu_start();
     motors_init();
+
+    // enclenche les capteurs IR
     proximity_start();
 
-        /** Inits the Inter Process Communication bus. */
-        messagebus_init(&bus, &bus_lock, &bus_condvar);
+	// Start the thread to sense distance (TOF)
+	distance_start();
 
-        messagebus_topic_t *imu_topic = messagebus_find_topic_blocking(&bus, "/imu");
-        imu_msg_t imu_values;
 
-        //wait 2 sec to be sure the e-puck is in a stable position
-        chThdSleepMilliseconds(2000);
-        imu_compute_offset(imu_topic, NB_SAMPLES_OFFSET);
+	// Inits the Inter Process Communication bus.
+	messagebus_init(&bus, &bus_lock, &bus_condvar);
 
-        calibrate_ir();
+	messagebus_topic_t *imu_topic = messagebus_find_topic_blocking(&bus, "/imu");
+	imu_msg_t imu_values;
 
-        while(1){
-            //wait for new measures to be published
-            messagebus_topic_wait(imu_topic, &imu_values, sizeof(imu_values));
+	//wait 2 sec to be sure the e-puck is in a stable position
+	chThdSleepMilliseconds(2000);
+	imu_compute_offset(imu_topic, NB_SAMPLES_OFFSET);
+	calibrate_ir();
 
-            //prints values in readable units
-            chprintf((BaseSequentialStream *)&SD3, "%Ax=%.2f Ay=%.2f Az=%.2f Gx=%.2f Gy=%.2f Gz=%.2f (%x)\r\n\n",
-                    imu_values.acceleration[X_AXIS], imu_values.acceleration[Y_AXIS], imu_values.acceleration[Z_AXIS],
-                    imu_values.gyro_rate[X_AXIS], imu_values.gyro_rate[Y_AXIS], imu_values.gyro_rate[Z_AXIS],
-                    imu_values.status);
 
-            show_gravity(&imu_values);
-            chThdSleepMilliseconds(100);
-            speed_switch(imu_values.gyro_rate[Z_AXIS]);
-            panik_check(imu_values.gyro_rate[X_AXIS], imu_values.gyro_rate[Y_AXIS]);
-            chprintf((BaseSequentialStream *)&SD3, "A=%d B=%d C=%d D=%d E=%d F=%d G=%d H=%d\r\n\n",
-                      get_calibrated_prox(0),get_calibrated_prox(1),get_calibrated_prox(2),get_calibrated_prox(3),
-                      get_calibrated_prox(4),get_calibrated_prox(5),get_calibrated_prox(6),get_calibrated_prox(7));
-        }
 
-    }
+	while(1){
+		//wait for new measures to be published
+		messagebus_topic_wait(imu_topic, &imu_values, sizeof(imu_values));
+
+		//prints values in readable units
+		chprintf((BaseSequentialStream *)&SD3, "%Ax=%.2f Ay=%.2f Az=%.2f Gx=%.2f Gy=%.2f Gz=%.2f (%x)\r\n\n",
+				imu_values.acceleration[X_AXIS], imu_values.acceleration[Y_AXIS], imu_values.acceleration[Z_AXIS],
+				imu_values.gyro_rate[X_AXIS], imu_values.gyro_rate[Y_AXIS], imu_values.gyro_rate[Z_AXIS],
+				imu_values.status);
+
+		panik_check(imu_values.gyro_rate[X_AXIS], imu_values.gyro_rate[Y_AXIS]);
+		chprintf((BaseSequentialStream *)&SD3, "A=%d B=%d C=%d D=%d E=%d F=%d G=%d H=%d\r\n\n",
+				  get_calibrated_prox(0),get_calibrated_prox(1),get_calibrated_prox(2),get_calibrated_prox(3),
+				  get_calibrated_prox(4),get_calibrated_prox(5),get_calibrated_prox(6),get_calibrated_prox(7));
+
+		show_gravity(&imu_values);
+		chThdSleepMilliseconds(100);
+		speed_switch(imu_values.gyro_rate[Z_AXIS]);
+	}
+
+}
 
 #define STACK_CHK_GUARD 0xe2dee396
 uintptr_t __stack_chk_guard = STACK_CHK_GUARD;
