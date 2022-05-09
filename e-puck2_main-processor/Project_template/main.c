@@ -11,20 +11,22 @@
 #include <imu.h>
 #include <usbcfg.h>
 #include <motors.h>
-#include "ir_sensors.h"
+//#include "ir_sensors.h"
 #include "sensors/proximity.h"
 
 //deux états possibles
 #define PANIK 1
 #define KALM 0
 //vitesse constante
-#define speed 600
+#define SPEED 600
 
 #define PI                  3.1415926536f
 //TO ADJUST IF NECESSARY. NOT ALL THE E-PUCK2 HAVE EXACTLY THE SAME WHEEL DISTANCE
 #define WHEEL_DISTANCE      5.4f    //cm
 #define PERIMETER_EPUCK     (PI * WHEEL_DISTANCE)
 #define NB_SAMPLES_OFFSET     200
+
+#define DIST_THRESHOLD	200
 
 messagebus_t bus;
 MUTEX_DECL(bus_lock);
@@ -57,6 +59,27 @@ static void timer11_start(void){
     //let the timer count to max value
     gptStartContinuous(&GPTD11, 0xFFFF);
 }
+
+static THD_WORKING_AREA(waDistanceDetec, 256);
+static THD_FUNCTION(DistanceDetec, arg) {
+
+	chRegSetThreadName(__FUNCTION__);
+	(void)arg;
+
+
+	while(1){
+			if(get_calibrated_prox(0) > DIST_THRESHOLD ||
+			   get_calibrated_prox(7) > DIST_THRESHOLD ||
+			   get_calibrated_prox(3) > DIST_THRESHOLD ||
+			   get_calibrated_prox(4) > DIST_THRESHOLD){
+						right_motor_set_speed(2*SPEED);
+						left_motor_set_speed(-2*SPEED);
+			}
+		chThdSleepMilliseconds(50);
+	}
+}
+
+
 
 void show_gravity(imu_msg_t *imu_values){
 
@@ -147,12 +170,12 @@ void panik_check(float gx, float gy){
 
 void speed_switch(float gz){
 		if(gz>0.4){
-              	right_motor_set_speed(speed);
-              	left_motor_set_speed(speed);
+              	right_motor_set_speed(SPEED);
+              	left_motor_set_speed(SPEED);
 	    }
 		else if(gz<-0.4){
-			right_motor_set_speed(-speed);
-			left_motor_set_speed(-speed);
+			right_motor_set_speed(-SPEED);
+			left_motor_set_speed(-SPEED);
 	    }
 		else{
 			right_motor_set_speed(0);
@@ -175,9 +198,6 @@ int main(void)
     // enclenche les capteurs IR
     proximity_start();
 
-	// Start the thread to sense distance (TOF)
-	distance_start();
-
 
 	// Inits the Inter Process Communication bus.
 	messagebus_init(&bus, &bus_lock, &bus_condvar);
@@ -190,6 +210,9 @@ int main(void)
 	imu_compute_offset(imu_topic, NB_SAMPLES_OFFSET);
 	calibrate_ir();
 
+	chThdCreateStatic(waDistanceDetec, sizeof(waDistanceDetec), NORMALPRIO, DistanceDetec, NULL);
+	// Start the thread to sense distance (TOF)
+	//distance_start();
 
 
 	while(1){
@@ -211,8 +234,8 @@ int main(void)
 		chThdSleepMilliseconds(100);
 		speed_switch(imu_values.gyro_rate[Z_AXIS]);
 	}
-
 }
+
 
 #define STACK_CHK_GUARD 0xe2dee396
 uintptr_t __stack_chk_guard = STACK_CHK_GUARD;
@@ -221,3 +244,4 @@ void __stack_chk_fail(void)
 {
     chSysHalt("Stack smashing detected");
 }
+

@@ -6,7 +6,7 @@
 #include <sensors/proximity.h>
 #include <motors.h>
 #include <main.h>
-#include <ir_sensors.h>
+#include "ir_sensors.h"
 #include "msgbus/messagebus.h"
 
 #define DIST_THRESHOLD	100
@@ -28,8 +28,9 @@ while(1) {
 	   get_calibrated_prox(7) > DIST_THRESHOLD || ){
 		right_motor_set_speed(0);
 		left_motor_set_speed(0);
-	}
+		}
 	chThdSleepMilliseconds(50);
+	}
 }
 
 void distance_start(void) {

@@ -13,10 +13,9 @@ CSRC += ./main.c \
 #		./i2c_bus.c \
 		./imu.c \
 		./mpu9250.c \
-		./ir_sensors.c \
-
+		
 #Header folders to include
-INCDIR +=  ./ir_sensors.h \
+INCDIR +=  
 
 #Jump to the main Makefile
 include $(GLOBAL_PATH)/Makefile

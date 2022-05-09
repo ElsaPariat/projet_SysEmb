@@ -15,7 +15,6 @@
 #define GYRO_RAW2DPS (RES_250DPS / MAX_INT16) //250DPS (degrees per second) scale for 32768 raw value
 
 
-
 extern messagebus_t bus;
 
 static imu_msg_t imu_values;
