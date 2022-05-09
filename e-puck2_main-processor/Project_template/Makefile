@@ -10,9 +10,11 @@ GLOBAL_PATH = ..
 
 #Source files to include
 CSRC += ./main.c \
+		./ctrl_direction.c \
 #		./i2c_bus.c \
 		./imu.c \
 		./mpu9250.c \
+
 		
 #Header folders to include
 INCDIR +=  

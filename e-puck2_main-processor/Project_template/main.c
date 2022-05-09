@@ -7,18 +7,17 @@
 #include "memory_protection.h"
 #include <main.h>
 #include <chprintf.h>
+#include <ctrl_direction.h>
 #include <i2c_bus.h>
 #include <imu.h>
 #include <usbcfg.h>
 #include <motors.h>
-//#include "ir_sensors.h"
 #include "sensors/proximity.h"
 
 //deux états possibles
 #define PANIK 1
 #define KALM 0
-//vitesse constante
-#define SPEED 600
+
 
 #define PI                  3.1415926536f
 //TO ADJUST IF NECESSARY. NOT ALL THE E-PUCK2 HAVE EXACTLY THE SAME WHEEL DISTANCE
@@ -26,7 +25,6 @@
 #define PERIMETER_EPUCK     (PI * WHEEL_DISTANCE)
 #define NB_SAMPLES_OFFSET     200
 
-#define DIST_THRESHOLD	200
 
 messagebus_t bus;
 MUTEX_DECL(bus_lock);
@@ -60,41 +58,84 @@ static void timer11_start(void){
     gptStartContinuous(&GPTD11, 0xFFFF);
 }
 
-/*
-//IR sensors thread
-static THD_WORKING_AREA(waDistanceDetec, 256);
-static THD_FUNCTION(DistanceDetec, arg) {
+void panik_check(float gx, float gy){
+	float threshold = 1;
+	static int etat = KALM;
+	static int old_etat = KALM;
 
-	chRegSetThreadName(__FUNCTION__);
-	(void)arg;
+    if(fabs(gx) > threshold || fabs(gy) > threshold){
+    	etat = PANIK;
+    	chprintf((BaseSequentialStream *)&SD3, "*paniiik*	\n");
+    	right_motor_set_speed(0);
+    	left_motor_set_speed(0);
+    }
+    else{
+    	etat = KALM;
+    	chprintf((BaseSequentialStream *)&SD3, "*kalm*	\n");
+    }
+
+    if (etat!=old_etat){
+  		palTogglePad(GPIOD, GPIOD_LED_FRONT);
+  		palTogglePad(GPIOB, GPIOB_LED_BODY);
+  		old_etat=etat;
+    }
+}
+
+int main(void)
+{
+
+    halInit();
+    chSysInit();
+    mpu_init();
+    serial_start();
+    timer11_start();
+    i2c_start();
+    imu_start();
+    motors_init();
+
+    // enclenche les capteurs IR
+    proximity_start();
+
+
+	// Inits the Inter Process Communication bus.
+	messagebus_init(&bus, &bus_lock, &bus_condvar);
+
+	messagebus_topic_t *imu_topic = messagebus_find_topic_blocking(&bus, "/imu");
+	imu_msg_t imu_values;
+
+	//wait 2 sec to be sure the e-puck is in a stable position
+	chThdSleepMilliseconds(2000);
+	imu_compute_offset(imu_topic, NB_SAMPLES_OFFSET);
+	calibrate_ir();
+
+	// Start the IR sensors thread
+	//chThdCreateStatic(waDistanceDetec, sizeof(waDistanceDetec), NORMALPRIO, DistanceDetec, NULL);
+
+	//distance_start();
 
 
 	while(1){
-			if(get_calibrated_prox(0) > DIST_THRESHOLD ||
-			   get_calibrated_prox(7) > DIST_THRESHOLD ||
-			   get_calibrated_prox(3) > DIST_THRESHOLD ||
-			   get_calibrated_prox(4) > DIST_THRESHOLD){
-						right_motor_set_speed(2*SPEED);
-						left_motor_set_speed(-2*SPEED);
-			}
-		chThdSleepMilliseconds(50);
-	}
-}
-*/
+		//wait for new measures to be published
+		messagebus_topic_wait(imu_topic, &imu_values, sizeof(imu_values));
 
-void ir_check(float gz){
-	if((gz>0.4) && (get_calibrated_prox(0) > DIST_THRESHOLD ||
-					get_calibrated_prox(7) > DIST_THRESHOLD)){
-		right_motor_set_speed(2*SPEED);
-		left_motor_set_speed(-2*SPEED);
-	}else if((gz<-0.4) && (get_calibrated_prox(3) > DIST_THRESHOLD ||
-			   	   	   	   get_calibrated_prox(4) > DIST_THRESHOLD)){
-		right_motor_set_speed(-2*SPEED);
-		left_motor_set_speed(2*SPEED);
+		//prints values in readable units
+		chprintf((BaseSequentialStream *)&SD3, "%Ax=%.2f Ay=%.2f Az=%.2f Gx=%.2f Gy=%.2f Gz=%.2f (%x)\r\n\n",
+				imu_values.acceleration[X_AXIS], imu_values.acceleration[Y_AXIS], imu_values.acceleration[Z_AXIS],
+				imu_values.gyro_rate[X_AXIS], imu_values.gyro_rate[Y_AXIS], imu_values.gyro_rate[Z_AXIS],
+				imu_values.status);
+
+		panik_check(imu_values.gyro_rate[X_AXIS], imu_values.gyro_rate[Y_AXIS]);
+		chprintf((BaseSequentialStream *)&SD3, "A=%d B=%d C=%d D=%d E=%d F=%d G=%d H=%d\r\n\n",
+				  get_calibrated_prox(0),get_calibrated_prox(1),get_calibrated_prox(2),get_calibrated_prox(3),
+				  get_calibrated_prox(4),get_calibrated_prox(5),get_calibrated_prox(6),get_calibrated_prox(7));
+
+		//show_gravity(&imu_values);
+		chThdSleepMilliseconds(100);
+		//speed_switch(imu_values.gyro_rate[Z_AXIS]);
+		ir_check(imu_values.gyro_rate[Z_AXIS]);
 	}
 }
 
-/*
 void show_gravity(imu_msg_t *imu_values){
 
     //we create variables for the led in order to turn them off at each loop and to
@@ -158,101 +199,6 @@ void show_gravity(imu_msg_t *imu_values){
     palWritePad(GPIOD, GPIOD_LED7, led7 ? 0 : 1);
 
 }
-*/
-
-void panik_check(float gx, float gy){
-	float threshold = 1;
-	static int etat = KALM;
-	static int old_etat = KALM;
-
-    if(fabs(gx) > threshold || fabs(gy) > threshold){
-    	etat = PANIK;
-    	chprintf((BaseSequentialStream *)&SD3, "*paniiik*	\n");
-    	right_motor_set_speed(0);
-    	left_motor_set_speed(0);
-    }
-    else{
-    	etat = KALM;
-    	chprintf((BaseSequentialStream *)&SD3, "*kalm*	\n");
-    }
-
-    if (etat!=old_etat){
-  		palTogglePad(GPIOD, GPIOD_LED_FRONT);
-  		palTogglePad(GPIOB, GPIOB_LED_BODY);
-  		old_etat=etat;
-    }
-}
-
-void speed_switch(float gz){
-		if(gz>0.4){
-              	right_motor_set_speed(SPEED);
-              	left_motor_set_speed(SPEED);
-	    }
-		else if(gz<-0.4){
-			right_motor_set_speed(-SPEED);
-			left_motor_set_speed(-SPEED);
-	    }
-		else{
-			right_motor_set_speed(0);
-			left_motor_set_speed(0);
-	    }
-}
-
-int main(void)
-{
-
-    halInit();
-    chSysInit();
-    mpu_init();
-    serial_start();
-    timer11_start();
-    i2c_start();
-    imu_start();
-    motors_init();
-
-    // enclenche les capteurs IR
-    proximity_start();
-
-
-	// Inits the Inter Process Communication bus.
-	messagebus_init(&bus, &bus_lock, &bus_condvar);
-
-	messagebus_topic_t *imu_topic = messagebus_find_topic_blocking(&bus, "/imu");
-	imu_msg_t imu_values;
-
-	//wait 2 sec to be sure the e-puck is in a stable position
-	chThdSleepMilliseconds(2000);
-	imu_compute_offset(imu_topic, NB_SAMPLES_OFFSET);
-	calibrate_ir();
-
-	// Start the IR sensors thread
-	//chThdCreateStatic(waDistanceDetec, sizeof(waDistanceDetec), NORMALPRIO, DistanceDetec, NULL);
-
-	//distance_start();
-
-
-	while(1){
-		//wait for new measures to be published
-		messagebus_topic_wait(imu_topic, &imu_values, sizeof(imu_values));
-
-		//prints values in readable units
-		chprintf((BaseSequentialStream *)&SD3, "%Ax=%.2f Ay=%.2f Az=%.2f Gx=%.2f Gy=%.2f Gz=%.2f (%x)\r\n\n",
-				imu_values.acceleration[X_AXIS], imu_values.acceleration[Y_AXIS], imu_values.acceleration[Z_AXIS],
-				imu_values.gyro_rate[X_AXIS], imu_values.gyro_rate[Y_AXIS], imu_values.gyro_rate[Z_AXIS],
-				imu_values.status);
-
-		panik_check(imu_values.gyro_rate[X_AXIS], imu_values.gyro_rate[Y_AXIS]);
-		chprintf((BaseSequentialStream *)&SD3, "A=%d B=%d C=%d D=%d E=%d F=%d G=%d H=%d\r\n\n",
-				  get_calibrated_prox(0),get_calibrated_prox(1),get_calibrated_prox(2),get_calibrated_prox(3),
-				  get_calibrated_prox(4),get_calibrated_prox(5),get_calibrated_prox(6),get_calibrated_prox(7));
-
-		//show_gravity(&imu_values);
-		chThdSleepMilliseconds(100);
-		speed_switch(imu_values.gyro_rate[Z_AXIS]);
-		ir_check(imu_values.gyro_rate[Z_AXIS]);
-	}
-}
-
 
 #define STACK_CHK_GUARD 0xe2dee396
 uintptr_t __stack_chk_guard = STACK_CHK_GUARD;
