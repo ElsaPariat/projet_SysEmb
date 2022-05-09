@@ -60,6 +60,8 @@ static void timer11_start(void){
     gptStartContinuous(&GPTD11, 0xFFFF);
 }
 
+/*
+//IR sensors thread
 static THD_WORKING_AREA(waDistanceDetec, 256);
 static THD_FUNCTION(DistanceDetec, arg) {
 
@@ -78,9 +80,21 @@ static THD_FUNCTION(DistanceDetec, arg) {
 		chThdSleepMilliseconds(50);
 	}
 }
+*/
 
+void ir_check(float gz){
+	if((gz>0.4) && (get_calibrated_prox(0) > DIST_THRESHOLD ||
+					get_calibrated_prox(7) > DIST_THRESHOLD)){
+		right_motor_set_speed(2*SPEED);
+		left_motor_set_speed(-2*SPEED);
+	}else if((gz<-0.4) && (get_calibrated_prox(3) > DIST_THRESHOLD ||
+			   	   	   	   get_calibrated_prox(4) > DIST_THRESHOLD)){
+		right_motor_set_speed(-2*SPEED);
+		left_motor_set_speed(2*SPEED);
+	}
+}
 
-
+/*
 void show_gravity(imu_msg_t *imu_values){
 
     //we create variables for the led in order to turn them off at each loop and to
@@ -144,6 +158,7 @@ void show_gravity(imu_msg_t *imu_values){
     palWritePad(GPIOD, GPIOD_LED7, led7 ? 0 : 1);
 
 }
+*/
 
 void panik_check(float gx, float gy){
 	float threshold = 1;
@@ -210,8 +225,9 @@ int main(void)
 	imu_compute_offset(imu_topic, NB_SAMPLES_OFFSET);
 	calibrate_ir();
 
-	chThdCreateStatic(waDistanceDetec, sizeof(waDistanceDetec), NORMALPRIO, DistanceDetec, NULL);
-	// Start the thread to sense distance (TOF)
+	// Start the IR sensors thread
+	//chThdCreateStatic(waDistanceDetec, sizeof(waDistanceDetec), NORMALPRIO, DistanceDetec, NULL);
+
 	//distance_start();
 
 
@@ -230,9 +246,10 @@ int main(void)
 				  get_calibrated_prox(0),get_calibrated_prox(1),get_calibrated_prox(2),get_calibrated_prox(3),
 				  get_calibrated_prox(4),get_calibrated_prox(5),get_calibrated_prox(6),get_calibrated_prox(7));
 
-		show_gravity(&imu_values);
+		//show_gravity(&imu_values);
 		chThdSleepMilliseconds(100);
 		speed_switch(imu_values.gyro_rate[Z_AXIS]);
+		ir_check(imu_values.gyro_rate[Z_AXIS]);
 	}
 }
 
