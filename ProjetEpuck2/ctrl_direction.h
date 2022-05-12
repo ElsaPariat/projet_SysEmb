@@ -10,9 +10,9 @@
 void ctrl_direction(float gz);
 
 /**
- * @brief 		 activates panik mode if a parasitic rotation along X or Y is detected
+ * @brief 		     activates panik mode if a parasitic rotation along X or Y is detected
  * 							panik mode = body and front leds activate + play A5 note
- * @param gz     gyroscope values for the X and Y axis
+ * @param gx, gy     gyroscope values for the X and Y axis
  */
 void panik_check(float gx, float gy);
 

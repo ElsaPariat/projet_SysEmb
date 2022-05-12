@@ -3,18 +3,14 @@
 #Simply adapt the lines below to be able to compile
 
 # Define project name here
-PROJECT = Project_template
+PROJECT = Projet_Robotique
 
 #Define path to the e-puck2_main-processor folder
-GLOBAL_PATH = ..
+GLOBAL_PATH = ..\e-puck2_main-processor
 
 #Source files to include
 CSRC += ./main.c \
 		./ctrl_direction.c \
-#		./i2c_bus.c \
-		./imu.c \
-		./mpu9250.c \
-
 		
 #Header folders to include
 INCDIR +=  
