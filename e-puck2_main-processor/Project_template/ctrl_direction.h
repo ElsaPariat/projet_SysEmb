@@ -4,6 +4,11 @@
 
 //void distance_start(void);
 
-void ir_check(float gz);
+void ctrl_direction(float gz);
+
+void panik_check(float gx, float gy);
+
+//Function reprise du TP3
+//void show_gravity(imu_msg_t *imu_values);
 
 #endif
