@@ -5,9 +5,11 @@
 
 #include <sensors/proximity.h>
 #include <motors.h>
+#include <imu.h>
 #include <main.h>
 #include "ctrl_direction.h"
 #include "msgbus/messagebus.h"
+#include "audio/play_melody.h"
 #include <usbcfg.h>
 #include <i2c_bus.h>
 
@@ -22,9 +24,12 @@
 #define PERIMETER_EPUCK     (PI * WHEEL_DISTANCE)
 //vitesse constante
 #define SPEED 600
-
-//treshold gyro axe Z
+//threshold for detection of Z axis rotation
 #define GZ	0.4
+//threshold for panik mode
+#define GXY	1
+//threshold for gravity check (to not use the leds when the robot is too horizontal)
+#define GXYZ  0.6
 
 #define DIST_THRESHOLD	150
 
@@ -53,15 +58,16 @@ void ctrl_direction(float gz){
 
 
 void panik_check(float gx, float gy){
-	float threshold = 1;
 	static int etat = KALM;
 	static int old_etat = KALM;
 
-    if(fabs(gx) > threshold || fabs(gy) > threshold){
+
+    if(fabs(gx) > GXY || fabs(gy) > GXY){
     	etat = PANIK;
     	chprintf((BaseSequentialStream *)&SD3, "*paniiik*	\n");
     	right_motor_set_speed(0);
     	left_motor_set_speed(0);
+    	playNote(NOTE_A5, 50);
     }
     else{
     	etat = KALM;
@@ -75,33 +81,30 @@ void panik_check(float gx, float gy){
     }
 }
 
-/*
 void show_gravity(imu_msg_t *imu_values){
 
     //we create variables for the led in order to turn them off at each loop and to
     //select which one to turn on
     uint8_t led1 = 0, led3 = 0, led5 = 0, led7 = 0;
-    //threshold value to not use the leds when the robot is too horizontal
-    float threshold = 0.6;
     //create a pointer to the array for shorter name
     float *accel = imu_values->acceleration;
     //variable to measure the time some functions take
     //volatile to not be optimized out by the compiler if not used
     volatile uint16_t time = 0;
 
-    if(fabs(accel[X_AXIS]) > threshold || fabs(accel[Y_AXIS]) > threshold){
+    if(fabs(accel[X_AXIS]) > GXYZ || fabs(accel[Y_AXIS]) > GXYZ){
 
      chSysLock();
-     GPTD11.tim->CNT = 0;
+     //GPTD11.tim->CNT = 0;
 
     //we find which led of each axis should be turned on
-    if(accel[X_AXIS] > threshold)
+    if(accel[X_AXIS] > GXYZ)
         led7 = 1;
-    else if(accel[X_AXIS] < -threshold)
+    else if(accel[X_AXIS] < -GXYZ)
         led3 = 1;
-    if(accel[Y_AXIS] > threshold)
+    if(accel[Y_AXIS] > GXYZ)
         led5 = 1;
-    else if(accel[Y_AXIS] < -threshold)
+    else if(accel[Y_AXIS] < -GXYZ)
         led1 = 1;
 
     //if two leds are turned on, turn off the one with the smaller
@@ -127,11 +130,11 @@ void show_gravity(imu_msg_t *imu_values){
         else
             led7 = 0;
     }
-    time = GPTD11.tim->CNT;
+    //time = GPTD11.tim->CNT;
     chSysUnlock();
     }
     //to see the duration on the console
-    chprintf((BaseSequentialStream *)&SD3, "time = %dus\n",time);
+    //chprintf((BaseSequentialStream *)&SD3, "time = %dus\n",time);
     //we invert the values because a led is turned on if the signal is low
     palWritePad(GPIOD, GPIOD_LED1, led1 ? 0 : 1);
     palWritePad(GPIOD, GPIOD_LED3, led3 ? 0 : 1);
@@ -139,4 +142,3 @@ void show_gravity(imu_msg_t *imu_values){
     palWritePad(GPIOD, GPIOD_LED7, led7 ? 0 : 1);
 
 }
-*/

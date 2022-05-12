@@ -6,6 +6,7 @@ extern "C" {
 #endif
 
 #include <hal.h>
+#include "msgbus/messagebus.h"
 #include <mpu9250.h>
 
 /** Message containing one measurement from the IMU. */
@@ -45,7 +46,7 @@ void imu_stop(void);
  * @param nb_samples    Number of measurements to take to construct the offset
  * 
  */
-void imu_compute_offset(messagebus_topic_t * imu_topic, uint16_t nb_samples);
+void imu_compute_offset(messagebus_topic_t *imu_topic, uint16_t nb_samples);
 
  /**
  * @brief   Returns the last accelerometer value measured
