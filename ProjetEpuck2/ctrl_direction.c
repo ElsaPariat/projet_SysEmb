@@ -28,7 +28,7 @@
 //threshold for panik mode
 #define GXY	2
 //threshold for gravity check (to not use the leds when the robot is too horizontal)
-#define GXYZ  0.6
+#define GRAVITHRESHOLD  0.6
 
 #define DIST_THRESHOLD	150
 
@@ -91,17 +91,16 @@ void show_gravity(imu_msg_t *imu_values){
     //create a pointer to the array for shorter name
     float *accel = imu_values->acceleration;
 
-    if(fabs(accel[X_AXIS]) > GXYZ || fabs(accel[Y_AXIS]) > GXYZ){
+    if(fabs(accel[X_AXIS]) > GRAVITHRESHOLD || fabs(accel[Y_AXIS]) > GRAVITHRESHOLD){
 
-     chSysLock();
     //we find which led of each axis should be turned on
-    if(accel[X_AXIS] > GXYZ)
+    if(accel[X_AXIS] > GRAVITHRESHOLD)
         led7 = 1;
-    else if(accel[X_AXIS] < -GXYZ)
+    else if(accel[X_AXIS] < -GRAVITHRESHOLD)
         led3 = 1;
-    if(accel[Y_AXIS] > GXYZ)
+    if(accel[Y_AXIS] > GRAVITHRESHOLD)
         led5 = 1;
-    else if(accel[Y_AXIS] < -GXYZ)
+    else if(accel[Y_AXIS] < -GRAVITHRESHOLD)
         led1 = 1;
 
     //if two leds are turned on, turn off the one with the smaller
@@ -127,7 +126,6 @@ void show_gravity(imu_msg_t *imu_values){
         else
             led7 = 0;
     }
-    chSysUnlock();
     }
 
     //we invert the values because a led is turned on if the signal is low

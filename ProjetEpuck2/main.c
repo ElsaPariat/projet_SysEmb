@@ -65,7 +65,6 @@ int main(void)
 				imu_values.gyro_rate[X_AXIS], imu_values.gyro_rate[Y_AXIS], imu_values.gyro_rate[Z_AXIS],
 				imu_values.status);
 
-
 		chprintf((BaseSequentialStream *)&SD3, "A=%d B=%d C=%d D=%d E=%d F=%d G=%d H=%d\r\n\n",
 				  get_calibrated_prox(0),get_calibrated_prox(1),get_calibrated_prox(2),get_calibrated_prox(3),
 				  get_calibrated_prox(4),get_calibrated_prox(5),get_calibrated_prox(6),get_calibrated_prox(7));
